@@ -2,6 +2,12 @@ conceptgraph/outputs
 conceptgraph/scripts/wandb
 conceptgraph/results
 conceptgraph/tmp
+conceptgraph/scannet*
+latest_pcd_save
+
+*.pt
+.git/objects
+
 manipulation/contact_graspnet/examples
 manipulation/contact_graspnet/test_data
 manipulation/contact_graspnet/checkpoints

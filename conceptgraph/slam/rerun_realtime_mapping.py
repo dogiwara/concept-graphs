@@ -39,7 +39,7 @@ from conceptgraph.utils.optional_rerun_wrapper import (
 from conceptgraph.utils.optional_wandb_wrapper import OptionalWandB
 from conceptgraph.utils.geometry import rotation_matrix_to_quaternion
 from conceptgraph.utils.logging_metrics import DenoisingTracker, MappingTracker
-from conceptgraph.utils.vlm import get_obj_rel_from_image_gpt4v, get_openai_client
+from conceptgraph.utils.vlm import consolidate_captions, get_obj_rel_from_image_gpt4v, get_openai_client
 from conceptgraph.utils.ious import mask_subtract_contained
 from conceptgraph.utils.general_utils import (
     ObjectClasses, 
@@ -50,11 +50,11 @@ from conceptgraph.utils.general_utils import (
     handle_rerun_saving, 
     load_saved_detections, 
     load_saved_hydra_json_config, 
-    make_vlm_edges, 
+    make_vlm_edges_and_captions, 
     measure_time, 
-    save_detection_results, 
+    save_detection_results,
     save_edge_json, 
-    save_hydra_config, 
+    save_hydra_config,
     save_obj_json, 
     save_objects_for_frame, 
     save_pointcloud, 
@@ -174,7 +174,8 @@ def main(cfg : DictConfig):
 
         ## Initialize the detection models
         detection_model = measure_time(YOLO)('yolov8l-world.pt')
-        sam_predictor = SAM('sam_l.pt') # SAM('mobile_sam.pt') # UltraLytics SAM
+        # sam_predictor = SAM('sam_l.pt') 
+        sam_predictor = SAM('mobile_sam.pt') # UltraLytics SAM
         # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
         clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
             "ViT-H-14", "laion2b_s32b_b79k"
@@ -185,7 +186,8 @@ def main(cfg : DictConfig):
         # Set the classes for the detection model
         detection_model.set_classes(obj_classes.get_classes_arr())
 
-        openai_client = get_openai_client()
+        # openai_client = get_openai_client()
+        openai_client = None
         
     else:
         print("\n".join(["NOT Running detections..."] * 10))
@@ -269,8 +271,9 @@ def main(cfg : DictConfig):
             )
             
             # Make the edges
-            labels, edges, edge_image = make_vlm_edges(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
-            
+            labels, edges, edge_image, captions = make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_labels, det_exp_vis_path, color_path, cfg.make_edges, openai_client)
+
+
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 image_rgb, curr_det, clip_model, clip_preprocess, clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
 
@@ -292,6 +295,7 @@ def main(cfg : DictConfig):
                 "detection_class_labels": detection_class_labels,
                 "labels": labels,
                 "edges": edges,
+                "captions": captions,
             }
 
             raw_gobs = results
@@ -583,6 +587,12 @@ def main(cfg : DictConfig):
                 })
     # LOOP OVER -----------------------------------------------------
     
+    # Consolidate captions 
+    for object in objects:
+        obj_captions = object['captions'][:20]
+        consolidated_caption = consolidate_captions(openai_client, obj_captions)
+        object['consolidated_caption'] = consolidated_caption
+
     handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix, exp_out_path)
 
     # Save the pointcloud
