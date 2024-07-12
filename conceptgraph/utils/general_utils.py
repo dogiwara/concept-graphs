@@ -384,6 +384,10 @@ def filter_detections(
         if keep:
             filtered_detections.append(current_det)
 
+    if len(filtered_detections) == 0:
+        print("No detections remaining after filtering.")
+        return None, None
+
     # Unzip the filtered results
     confidences, class_ids, xyxy, masks, indices = zip(*filtered_detections)
     filtered_labels = [given_labels[i] for i in indices]
@@ -448,7 +452,7 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes, detection_class_la
     edges = []
     captions = []
     edge_image = None
-    if make_edges_flag:
+    if make_edges_flag and filtered_detections is not None and len(filtered_detections.confidence) > 0:
         vis_save_path_for_vlm = get_vlm_annotated_image_path(det_exp_vis_path, color_path)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(det_exp_vis_path, color_path, w_edges=True)
         annotated_image_for_vlm, sorted_indices = annotate_for_vlm(image, filtered_detections, obj_classes, labels, save_path=vis_save_path_for_vlm)
